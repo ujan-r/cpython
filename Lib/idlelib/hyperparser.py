@@ -31,15 +31,46 @@ class HyperParser:
 
         parser = pyparse.Parser(editwin.indentwidth, editwin.tabwidth)
 
-        startatindex = text.index('iomark')
-
         def index2line(index):
             return int(float(index))
         lno = index2line(text.index(index))
 
-        statement = text.get(startatindex, '%d.end' % lno)
-        self.rawtext = statement
-        parser.set_code(statement + '\n')
+        if hasattr(editwin, 'console'):
+            startatindex = text.index('iomark')
+            statement = text.get(startatindex, '%d.end' % lno)
+            self.rawtext = statement
+            parser.set_code(statement + '\n')
+        else:
+            if not editwin.prompt_last_line:
+                for context in editwin.num_context_lines:
+                    startat = max(lno - context, 1)
+                    startatindex = repr(startat) + ".0"
+                    stopatindex = "%d.end" % lno
+                    # We add the newline because PyParse requires a newline
+                    # at end. We add a space so that index won't be at end
+                    # of line, so that its status will be the same as the
+                    # char before it, if should.
+                    parser.set_code(text.get(startatindex, stopatindex)+' \n')
+                    bod = parser.find_good_parse_start(
+                              editwin._build_char_in_string_func(startatindex))
+                    if bod is not None or startat == 1:
+                        break
+                parser.set_lo(bod or 0)
+            else:
+                r = text.tag_prevrange("console", index)
+                if r:
+                    startatindex = r[1]
+                else:
+                    startatindex = "1.0"
+                stopatindex = "%d.end" % lno
+                # We add the newline because PyParse requires it. We add a
+                # space so that index won't be at end of line, so that its
+                # status will be the same as the char before it, if should.
+                parser.set_code(text.get(startatindex, stopatindex)+' \n')
+                parser.set_lo(0)
+
+            # We want what the parser has, minus the last newline and space.
+            self.rawtext = parser.code[:-2]
 
         # Parser.code apparently preserves the statement we are in, so
         # that stopatindex can be used to synchronize the string with
